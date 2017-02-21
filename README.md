@@ -29,3 +29,8 @@ Path to libgphoto2 containing folder (see more in [JNA documentation](https://gi
 ### Example execution with parameters
 
 ```java -Djna.library.path=/home/pi/lib -jar /path/to/gp2lvs-1.0.0.jar -port 9999```
+
+### Custom dependencies
+
+* https://github.com/mvmn/jlibgphoto2
+* https://github.com/mvmn/gphoto2-jna
