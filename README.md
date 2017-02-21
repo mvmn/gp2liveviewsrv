@@ -26,3 +26,6 @@ Change server port
 
 Path to libgphoto2 containing folder (see more in [JNA documentation](https://github.com/java-native-access/jna/blob/master/www/GettingStarted.md))
 
+### Example execution with parameters
+
+```java -Djna.library.path=/home/pi/lib -jar /path/to/gp2lvs-1.0.0.jar -port 9999```
