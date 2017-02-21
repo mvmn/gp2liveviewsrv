@@ -20,6 +20,10 @@ Stops currently active live-view
 
 Change server port
 
+* Optional: ```-authToken <authorization token>```
+
+Specify shared secret to be sent with every HTTP request for authorization in X-AuthToken header. When specified, all requests without proper token value will be denied.
+
 ### Java System properties
 
 * Optional: ```-Djna.library.path=/home/pi/lib```
