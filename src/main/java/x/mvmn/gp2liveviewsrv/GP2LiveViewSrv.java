@@ -64,12 +64,15 @@ public class GP2LiveViewSrv {
 				}
 
 				public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+					boolean authorized = false;
 					if (request instanceof HttpServletRequest) {
 						HttpServletRequest httpRequest = (HttpServletRequest) request;
 						if (authToken.equals(httpRequest.getHeader("X-AuthToken"))) {
+							authorized = true;
 							chain.doFilter(httpRequest, response);
 						}
-					} else {
+					}
+					if (!authorized) {
 						if (response instanceof HttpServletResponse) {
 							((HttpServletResponse) response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
 						}
