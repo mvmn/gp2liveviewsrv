@@ -16,11 +16,13 @@ import javax.servlet.http.HttpServletResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import x.mvmn.gphoto2.jna.Gphoto2Library;
 import x.mvmn.jlibgphoto2.GP2AutodetectCameraHelper;
 import x.mvmn.jlibgphoto2.GP2AutodetectCameraHelper.CameraListItemBean;
 import x.mvmn.jlibgphoto2.GP2Camera;
 import x.mvmn.jlibgphoto2.GP2Context;
 import x.mvmn.jlibgphoto2.GP2PortInfoList;
+import x.mvmn.jlibgphoto2.exception.GP2Exception;
 
 public class GP2ApiServlet extends HttpServlet {
 	private static final long serialVersionUID = 3186442803531247173L;
@@ -75,6 +77,16 @@ public class GP2ApiServlet extends HttpServlet {
 					portInfoList = new GP2PortInfoList();
 					try {
 						camera = new GP2Camera(portInfoList.getByPath(cameraParam));
+					} catch (GP2Exception e) {
+						if (e.getCode() == Gphoto2Library.GP_ERROR_CAMERA_BUSY) {
+							System.err.println("Can't start liveview: camera busy");
+						} else if (e.getCode() == Gphoto2Library.GP_ERROR_IO_USB_CLAIM) {
+							System.err.println("Can't start liveview: USB busy");
+						} else if (e.getCode() == Gphoto2Library.GP_ERROR_NOT_SUPPORTED) {
+							System.err.println("Can't start liveview: not supported");
+						} else {
+							System.err.println("Can't start liveview: camera error " + e.getMessage());
+						}
 					} catch (Exception e) {
 						camera = null;
 						e.printStackTrace();
