@@ -48,8 +48,9 @@ public class GP2ApiServlet extends HttpServlet {
 	@Override
 	public void doPost(HttpServletRequest request, HttpServletResponse response) {
 		try {
-			if (request.getPathInfo().equals("/stopLiveView")) {
-
+			final String requestPath = request.getServletPath() + (request.getPathInfo() != null ? request.getPathInfo() : "");
+			if (requestPath.equals("/stopLiveView")) {
+				stopLiveViewWaitUntilEffective();
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -59,13 +60,14 @@ public class GP2ApiServlet extends HttpServlet {
 	@Override
 	public void doGet(HttpServletRequest request, HttpServletResponse response) {
 		try {
-			if (request.getPathInfo().equals("/cameras")) {
+			final String requestPath = request.getServletPath() + (request.getPathInfo() != null ? request.getPathInfo() : "");
+			if (requestPath.equals("/cameras")) {
 				GP2Context context = new GP2Context();
 				List<CameraListItemBean> detectedCameras = GP2AutodetectCameraHelper.autodetectCameras(context);
 				Map<String, Object> result = new HashMap<String, Object>();
 				result.put("cameras", detectedCameras);
 				writeJson(result, response);
-			} else if (request.getPathInfo().equals("/liveView")) {
+			} else if (requestPath.equals("/liveView")) {
 				String cameraParam = request.getParameter("camera");
 				GP2Camera camera = null;
 				GP2PortInfoList portInfoList = null;
