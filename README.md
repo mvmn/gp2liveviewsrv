@@ -16,13 +16,13 @@ Stops currently active live-view
 
 ### Command-line parametes
 
-* Optional: -port <number>
+* Optional: ```-port <number>```
 
 Change server port
 
 ### Java System properties
 
-* Optional: -Djna.library.path=/home/pi/lib
+* Optional: ```-Djna.library.path=/home/pi/lib```
 
 Path to libgphoto2 containing folder (see more in [JNA documentation](https://github.com/java-native-access/jna/blob/master/www/GettingStarted.md))
 
