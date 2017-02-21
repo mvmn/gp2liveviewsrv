@@ -82,6 +82,22 @@ public class GP2LiveViewSrv {
 				public void destroy() {
 				}
 			};
+
+			// CORS
+			context.addFilter(new FilterHolder(new Filter() {
+				public void init(FilterConfig filterConfig) throws ServletException {
+				}
+
+				public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain) throws IOException, ServletException {
+					if (response instanceof HttpServletResponse) {
+						((HttpServletResponse) response).setHeader("Access-Control-Allow-Origin", "*");
+					}
+					chain.doFilter(request, response);
+				}
+
+				public void destroy() {
+				}
+			}), "/*", EnumSet.of(DispatcherType.REQUEST));
 			context.addFilter(new FilterHolder(tokenAuthFilter), "/*", EnumSet.of(DispatcherType.REQUEST));
 		}
 	}
