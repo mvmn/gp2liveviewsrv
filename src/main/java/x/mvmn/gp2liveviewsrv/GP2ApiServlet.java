@@ -17,9 +17,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import x.mvmn.gphoto2.jna.Gphoto2Library;
+import x.mvmn.jlibgphoto2.CameraConfigEntryBean;
+import x.mvmn.jlibgphoto2.CameraConfigEntryBean.CameraConfigEntryType;
 import x.mvmn.jlibgphoto2.GP2AutodetectCameraHelper;
 import x.mvmn.jlibgphoto2.GP2AutodetectCameraHelper.CameraListItemBean;
 import x.mvmn.jlibgphoto2.GP2Camera;
+import x.mvmn.jlibgphoto2.GP2ConfigHelper;
 import x.mvmn.jlibgphoto2.GP2Context;
 import x.mvmn.jlibgphoto2.GP2PortInfoList;
 import x.mvmn.jlibgphoto2.exception.GP2Exception;
@@ -53,6 +56,9 @@ public class GP2ApiServlet extends HttpServlet {
 			final String requestPath = request.getServletPath() + (request.getPathInfo() != null ? request.getPathInfo() : "");
 			if (requestPath.equals("/stopLiveView")) {
 				stopLiveViewWaitUntilEffective();
+			} else if (requestPath.equals("/capture")) {
+				stopLiveViewWaitUntilEffective();
+				capture(request.getParameter("camera"));
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -64,44 +70,33 @@ public class GP2ApiServlet extends HttpServlet {
 		try {
 			final String requestPath = request.getServletPath() + (request.getPathInfo() != null ? request.getPathInfo() : "");
 			if (requestPath.equals("/cameras")) {
-				GP2Context context = new GP2Context();
-				List<CameraListItemBean> detectedCameras = GP2AutodetectCameraHelper.autodetectCameras(context);
 				Map<String, Object> result = new HashMap<String, Object>();
-				result.put("cameras", detectedCameras);
+				synchronized (this) {
+					GP2Context context = new GP2Context();
+					List<CameraListItemBean> detectedCameras = GP2AutodetectCameraHelper.autodetectCameras(context);
+					result.put("cameras", detectedCameras);
+				}
 				writeJson(result, response);
 			} else if (requestPath.equals("/liveView")) {
 				String cameraParam = request.getParameter("camera");
+				System.out.println("Requested live view for " + cameraParam);
 				GP2Camera camera = null;
-				GP2PortInfoList portInfoList = null;
-				try {
-					portInfoList = new GP2PortInfoList();
+				stopLiveViewWaitUntilEffective();
+				if (LIVE_VIEW_IN_PROGRESS.compareAndSet(false, true)) {
 					try {
-						camera = new GP2Camera(portInfoList.getByPath(cameraParam));
-					} catch (GP2Exception e) {
-						if (e.getCode() == Gphoto2Library.GP_ERROR_CAMERA_BUSY) {
-							System.err.println("Can't start liveview: camera busy");
-						} else if (e.getCode() == Gphoto2Library.GP_ERROR_IO_USB_CLAIM) {
-							System.err.println("Can't start liveview: USB busy");
-						} else if (e.getCode() == Gphoto2Library.GP_ERROR_NOT_SUPPORTED) {
-							System.err.println("Can't start liveview: not supported");
-						} else {
-							System.err.println("Can't start liveview: camera error " + e.getMessage());
-						}
-					} catch (Exception e) {
-						camera = null;
-						e.printStackTrace();
-					}
+						camera = getCameraInstanceForPort(cameraParam);
 
-					if (camera != null) {
-						response.setContentType("multipart/x-mixed-replace; boundary=--BoundaryString");
-						final OutputStream outputStream = response.getOutputStream();
-						byte[] jpeg;
-						stopLiveViewWaitUntilEffective();
-						if (LIVE_VIEW_IN_PROGRESS.compareAndSet(false, true)) {
+						if (camera != null) {
+							response.setContentType("multipart/x-mixed-replace; boundary=--BoundaryString");
+							final OutputStream outputStream = response.getOutputStream();
+							byte[] jpeg;
+							System.out.println("Serving live view for " + cameraParam);
 							liveViewEnabled.set(true);
 							while (liveViewEnabled.get()) {
 								try {
-									jpeg = camera.capturePreview();
+									synchronized (this) {
+										jpeg = camera.capturePreview();
+									}
 									outputStream.write(PREFIX);
 									outputStream.write(String.valueOf(jpeg.length).getBytes("UTF-8"));
 									outputStream.write(SEPARATOR);
@@ -120,24 +115,88 @@ public class GP2ApiServlet extends HttpServlet {
 									break;
 								}
 							}
-							LIVE_VIEW_IN_PROGRESS.set(false);
 						} else {
-							response.setStatus(HttpServletResponse.SC_CONFLICT);
+							response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 						}
-					} else {
-						response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+					} finally {
+						System.out.println("Stopping live view for " + cameraParam);
+						closeQuietly(camera);
+						System.out.println("Stopped live view for " + cameraParam);
+						LIVE_VIEW_IN_PROGRESS.set(false);
 					}
-				} finally {
-					if (portInfoList != null) {
-						portInfoList.close();
-					}
-					if (camera != null) {
-						camera.close();
-					}
+				} else {
+					response.setStatus(HttpServletResponse.SC_CONFLICT);
 				}
+
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
+		}
+	}
+
+	protected void capture(String port) {
+		GP2Camera camera = null;
+		try {
+			camera = getCameraInstanceForPort(port);
+
+			if (camera != null) {
+				synchronized (this) {
+					camera.capture();
+				}
+			}
+		} finally {
+			closeQuietly(camera);
+		}
+	}
+
+	protected synchronized GP2Camera getCameraInstanceForPort(String port) {
+		GP2Camera camera = null;
+		synchronized (this) {
+			GP2PortInfoList portInfoList = new GP2PortInfoList();
+			try {
+				camera = new GP2Camera(portInfoList.getByPath(port));
+			} catch (GP2Exception e) {
+				if (e.getCode() == Gphoto2Library.GP_ERROR_CAMERA_BUSY) {
+					System.err.println("Can't access camera: camera busy");
+				} else if (e.getCode() == Gphoto2Library.GP_ERROR_IO_USB_CLAIM) {
+					System.err.println("Can't access camera: USB busy");
+				} else if (e.getCode() == Gphoto2Library.GP_ERROR_NOT_SUPPORTED) {
+					System.err.println("Can't access camera: not supported");
+				} else {
+					System.err.println("Can't access camera: camera error " + e.getMessage());
+				}
+			} catch (Exception e) {
+				camera = null;
+				e.printStackTrace();
+			} finally {
+				if (portInfoList != null) {
+					try {
+						portInfoList.close();
+					} catch (Exception e) {
+					}
+				}
+			}
+		}
+
+		return camera;
+	}
+
+	protected void closeQuietly(GP2Camera camera) {
+		if (camera != null) {
+			try {
+				synchronized (this) {
+					List<CameraConfigEntryBean> cfg = GP2ConfigHelper.getConfig(camera);
+					for (CameraConfigEntryBean cb : cfg) {
+						if (cb.getPath().contains("viewfinder") && cb.getType() == CameraConfigEntryType.TOGGLE) {
+							GP2ConfigHelper.setConfig(camera, cb.cloneWithNewValue(0));
+						}
+					}
+					camera.release();
+					camera.close();
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		}
 	}
 
