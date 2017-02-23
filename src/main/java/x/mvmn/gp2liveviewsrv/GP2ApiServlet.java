@@ -187,7 +187,7 @@ public class GP2ApiServlet extends HttpServlet {
 				synchronized (this) {
 					List<CameraConfigEntryBean> cfg = GP2ConfigHelper.getConfig(camera);
 					for (CameraConfigEntryBean cb : cfg) {
-						if (cb.getPath().contains("viewfinder") && cb.getType() == CameraConfigEntryType.TOGGLE) {
+						if (cb.getPath().toLowerCase().contains("viewfinder") && cb.getType() == CameraConfigEntryType.TOGGLE) {
 							GP2ConfigHelper.setConfig(camera, cb.cloneWithNewValue(0));
 						}
 					}
