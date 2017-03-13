@@ -81,11 +81,16 @@ public class GP2ApiServlet extends HttpServlet {
 						config.put(entry.getKey().toString(), entry.getValue().toString());
 					}
 				}
-				String fileName = capture(response, request.getParameter("camera"), Boolean.valueOf(request.getParameter("download")),
+				String[] fileNames = capture(response, request.getParameter("camera"), Boolean.valueOf(request.getParameter("download")),
 						Boolean.valueOf(request.getParameter("downloadPreview")), config);
-				if (fileName != null) {
+				if (fileNames != null) {
 					Map<String, String> responseData = new HashMap<String, String>();
-					responseData.put("fileName", fileName);
+					if (fileNames[0] != null) {
+						responseData.put("fileName", fileNames[0]);
+					}
+					if (fileNames[1] != null) {
+						responseData.put("previewFileName", fileNames[1]);
+					}
 					writeJson(GSON, responseData, response);
 				}
 			}
@@ -165,8 +170,8 @@ public class GP2ApiServlet extends HttpServlet {
 		}
 	}
 
-	protected String capture(HttpServletResponse response, String port, boolean download, boolean downloadPreview, Map<String, String> config) {
-		String downloadedFileName = null;
+	protected String[] capture(HttpServletResponse response, String port, boolean download, boolean downloadPreview, Map<String, String> config) {
+		String[] result = new String[2];
 		GP2Camera camera = null;
 		try {
 			camera = getCameraInstanceForPort(port);
@@ -204,25 +209,26 @@ public class GP2ApiServlet extends HttpServlet {
 					if (capturedFile != null) {
 						if (download) {
 							byte[] content = GP2CameraFilesHelper.getCameraFileContents(camera, capturedFile.getPath(), capturedFile.getName());
-							downloadedFileName = capturedFile.getName();
-							File targetFile = new File(imagesDownloadFolder, downloadedFileName);
-							String targetFilePath = downloadedFileName;
+							File targetFile = new File(imagesDownloadFolder, capturedFile.getName());
+							String targetFilePath = capturedFile.getName();
 							try {
 								targetFilePath = targetFile.getCanonicalPath();
 								FileUtils.writeByteArrayToFile(targetFile, content, false);
+								result[0] = capturedFile.getName();
 							} catch (IOException e) {
 								System.err.println("Error saving file " + targetFilePath);
-								downloadedFileName = null;
 								e.printStackTrace();
 							}
 						}
 						if (downloadPreview) {
 							byte[] content = GP2CameraFilesHelper.getCameraFileContents(camera, capturedFile.getPath(), capturedFile.getName(), true);
-							File targetFile = new File(imagesDownloadFolder, "preview_" + capturedFile.getName());
-							String targetFilePath = "preview_" + capturedFile.getName();
+							String fileName = "preview_" + capturedFile.getName();
+							File targetFile = new File(imagesDownloadFolder, fileName);
+							String targetFilePath = fileName;
 							try {
 								targetFilePath = targetFile.getCanonicalPath();
 								FileUtils.writeByteArrayToFile(targetFile, content, false);
+								result[1] = fileName;
 							} catch (IOException e) {
 								System.err.println("Error saving file " + targetFilePath);
 								e.printStackTrace();
@@ -236,7 +242,7 @@ public class GP2ApiServlet extends HttpServlet {
 		} finally {
 			closeQuietly(camera);
 		}
-		return downloadedFileName;
+		return result;
 	}
 
 	protected synchronized GP2Camera getCameraInstanceForPort(String port) {
