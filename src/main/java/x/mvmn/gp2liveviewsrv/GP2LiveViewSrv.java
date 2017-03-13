@@ -1,5 +1,6 @@
 package x.mvmn.gp2liveviewsrv;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.EnumSet;
 
@@ -27,6 +28,7 @@ public class GP2LiveViewSrv {
 		Integer port = null;
 		final Options cliOptions = new Options();
 
+		cliOptions.addOption("imagesFolder", true, "Images folder (defaults to ~/gp2liveview/images).");
 		cliOptions.addOption("port", true, "HTTP port.");
 		cliOptions.addOption("authToken", true, "Optional authToken - to be sent with .");
 
@@ -45,18 +47,32 @@ public class GP2LiveViewSrv {
 			}
 		}
 
-		new GP2LiveViewSrv(port != null ? port.intValue() : 8080, commandLine.hasOption("authToken") ? commandLine.getOptionValue("authToken") : null).start();
+		File userHome = new File(System.getProperty("user.home"));
+
+		File imagesFolder;
+		if (commandLine.hasOption("imagesFolder")) {
+			imagesFolder = new File(commandLine.getOptionValue("imagesFolder"));
+		} else {
+			imagesFolder = new File(new File(userHome, ".gp2liveview"), "images");
+		}
+		imagesFolder.mkdirs();
+
+		int portVal = port != null ? port.intValue() : 8080;
+		String authToken = commandLine.hasOption("authToken") ? commandLine.getOptionValue("authToken") : null;
+
+		new GP2LiveViewSrv(portVal, authToken, imagesFolder).start();
 	}
 
 	protected final Server server;
 
-	public GP2LiveViewSrv(int port, final String authToken) {
+	public GP2LiveViewSrv(int port, final String authToken, final File imagesFolder) {
 		this.server = new Server(port);
 		this.server.setStopAtShutdown(true);
 
 		ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
 		server.setHandler(context);
-		context.addServlet(new ServletHolder(new GP2ApiServlet()), "/");
+		context.addServlet(new ServletHolder(new ImagesServlet(imagesFolder)), "/images/*");
+		context.addServlet(new ServletHolder(new GP2ApiServlet(imagesFolder)), "/");
 		if (authToken != null) {
 			Filter tokenAuthFilter = new Filter() {
 

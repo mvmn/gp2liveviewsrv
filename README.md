@@ -14,6 +14,10 @@ Starts live-view and serves MJPEG stream from chosen camera port (specified via 
 
 Stops currently active live-view
 
+* POST /capture
+
+Trigger capture
+
 ### Command-line parametes
 
 * Optional: ```-port <number>```

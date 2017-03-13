@@ -1,6 +1,7 @@
 package x.mvmn.gp2liveviewsrv;
 
 import java.io.EOFException;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
@@ -13,15 +14,19 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.io.FileUtils;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import x.mvmn.gphoto2.jna.Gphoto2Library;
 import x.mvmn.jlibgphoto2.CameraConfigEntryBean;
 import x.mvmn.jlibgphoto2.CameraConfigEntryBean.CameraConfigEntryType;
+import x.mvmn.jlibgphoto2.CameraFileSystemEntryBean;
 import x.mvmn.jlibgphoto2.GP2AutodetectCameraHelper;
 import x.mvmn.jlibgphoto2.GP2AutodetectCameraHelper.CameraListItemBean;
 import x.mvmn.jlibgphoto2.GP2Camera;
+import x.mvmn.jlibgphoto2.GP2CameraFilesHelper;
 import x.mvmn.jlibgphoto2.GP2ConfigHelper;
 import x.mvmn.jlibgphoto2.GP2Context;
 import x.mvmn.jlibgphoto2.GP2PortInfoList;
@@ -32,6 +37,8 @@ public class GP2ApiServlet extends HttpServlet {
 
 	protected final Gson GSON = new GsonBuilder().create();
 	protected final AtomicBoolean liveViewEnabled = new AtomicBoolean(true);
+
+	protected final File imagesDownloadFolder;
 	protected static final AtomicBoolean LIVE_VIEW_IN_PROGRESS = new AtomicBoolean(false);
 
 	private static final byte[] PREFIX;
@@ -50,6 +57,10 @@ public class GP2ApiServlet extends HttpServlet {
 		SEPARATOR = separator;
 	}
 
+	public GP2ApiServlet(final File imagesDownloadFolder) {
+		this.imagesDownloadFolder = imagesDownloadFolder;
+	}
+
 	@Override
 	public void doPost(HttpServletRequest request, HttpServletResponse response) {
 		try {
@@ -58,7 +69,8 @@ public class GP2ApiServlet extends HttpServlet {
 				stopLiveViewWaitUntilEffective();
 			} else if (requestPath.equals("/capture")) {
 				stopLiveViewWaitUntilEffective();
-				capture(request.getParameter("camera"));
+				capture(request.getParameter("camera"), Boolean.valueOf(request.getParameter("download")),
+						Boolean.valueOf(request.getParameter("downloadPreview")));
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -76,7 +88,7 @@ public class GP2ApiServlet extends HttpServlet {
 					List<CameraListItemBean> detectedCameras = GP2AutodetectCameraHelper.autodetectCameras(context);
 					result.put("cameras", detectedCameras);
 				}
-				writeJson(result, response);
+				writeJson(GSON, result, response);
 			} else if (requestPath.equals("/liveView")) {
 				String cameraParam = request.getParameter("camera");
 				System.out.println("Requested live view for " + cameraParam);
@@ -128,25 +140,59 @@ public class GP2ApiServlet extends HttpServlet {
 					response.setStatus(HttpServletResponse.SC_CONFLICT);
 				}
 
+			} else {
+				response.setStatus(HttpServletResponse.SC_NOT_FOUND);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
 
-	protected void capture(String port) {
+	protected String capture(String port, boolean download, boolean downloadPreview) {
+		String downloadedFileName = null;
 		GP2Camera camera = null;
 		try {
 			camera = getCameraInstanceForPort(port);
 
 			if (camera != null) {
 				synchronized (this) {
-					camera.capture();
+					CameraFileSystemEntryBean capturedFile = camera.capture();
+					if (capturedFile != null) {
+						if (download) {
+							byte[] content = GP2CameraFilesHelper.getCameraFileContents(camera, capturedFile.getPath(), capturedFile.getName());
+							downloadedFileName = capturedFile.getName();
+							File targetFile = new File(imagesDownloadFolder, downloadedFileName);
+							String targetFilePath = downloadedFileName;
+							try {
+								targetFilePath = targetFile.getCanonicalPath();
+								FileUtils.writeByteArrayToFile(targetFile, content, false);
+							} catch (IOException e) {
+								System.err.println("Error saving file " + targetFilePath);
+								downloadedFileName = null;
+								e.printStackTrace();
+							}
+						}
+						if (downloadPreview) {
+							byte[] content = GP2CameraFilesHelper.getCameraFileContents(camera, capturedFile.getPath(), capturedFile.getName(), true);
+							downloadedFileName = "preview_" + capturedFile.getName();
+							File targetFile = new File(imagesDownloadFolder, downloadedFileName);
+							String targetFilePath = downloadedFileName;
+							try {
+								targetFilePath = targetFile.getCanonicalPath();
+								FileUtils.writeByteArrayToFile(targetFile, content, false);
+							} catch (IOException e) {
+								System.err.println("Error saving file " + targetFilePath);
+								downloadedFileName = null;
+								e.printStackTrace();
+							}
+						}
+					}
 				}
 			}
 		} finally {
 			closeQuietly(camera);
 		}
+		return downloadedFileName;
 	}
 
 	protected synchronized GP2Camera getCameraInstanceForPort(String port) {
@@ -210,7 +256,7 @@ public class GP2ApiServlet extends HttpServlet {
 		}
 	}
 
-	protected void writeJson(Object object, HttpServletResponse response) throws IOException {
+	protected static void writeJson(Gson GSON, Object object, HttpServletResponse response) throws IOException {
 		response.setContentType("application/json");
 		GSON.toJson(object, response.getWriter());
 	}
