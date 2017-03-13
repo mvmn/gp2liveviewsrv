@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -69,8 +71,22 @@ public class GP2ApiServlet extends HttpServlet {
 				stopLiveViewWaitUntilEffective();
 			} else if (requestPath.equals("/capture")) {
 				stopLiveViewWaitUntilEffective();
-				capture(request.getParameter("camera"), Boolean.valueOf(request.getParameter("download")),
-						Boolean.valueOf(request.getParameter("downloadPreview")));
+				String body = IOUtils.toString(request.getInputStream(), StandardCharsets.UTF_8);
+				Map<String, String> config = null;
+				if (body != null && body.length() > 0) {
+					Map<?, ?> configMap = GSON.fromJson(body, Map.class);
+					config = new HashMap<String, String>();
+					for (Map.Entry<?, ?> entry : configMap.entrySet()) {
+						config.put(entry.getKey().toString(), entry.getValue().toString());
+					}
+				}
+				String fileName = capture(response, request.getParameter("camera"), Boolean.valueOf(request.getParameter("download")),
+						Boolean.valueOf(request.getParameter("downloadPreview")), config);
+				if (fileName != null) {
+					Map<String, String> responseData = new HashMap<String, String>();
+					responseData.put("fileName", fileName);
+					writeJson(GSON, responseData, response);
+				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -148,13 +164,37 @@ public class GP2ApiServlet extends HttpServlet {
 		}
 	}
 
-	protected String capture(String port, boolean download, boolean downloadPreview) {
+	protected String capture(HttpServletResponse response, String port, boolean download, boolean downloadPreview, Map<String, String> config) {
 		String downloadedFileName = null;
 		GP2Camera camera = null;
 		try {
 			camera = getCameraInstanceForPort(port);
 
 			if (camera != null) {
+				if (config != null && config.size() > 0) {
+					List<CameraConfigEntryBean> cfg = GP2ConfigHelper.getConfig(camera);
+					Map<String, CameraConfigEntryBean> configAsMap = new HashMap<String, CameraConfigEntryBean>();
+					for (CameraConfigEntryBean cb : cfg) {
+						configAsMap.put(cb.getPath(), cb);
+					}
+					for (Map.Entry<String, String> configProp : config.entrySet()) {
+						CameraConfigEntryBean confBean = configAsMap.get(configProp.getKey());
+						if (confBean != null) {
+							switch (confBean.getType().getValueType()) {
+								case FLOAT:
+									confBean = confBean.cloneWithNewValue(Float.parseFloat(configProp.getValue()));
+								case INT:
+									confBean = confBean.cloneWithNewValue(Integer.parseInt(configProp.getValue()));
+								case STRING:
+								default:
+									confBean = confBean.cloneWithNewValue(configProp.getValue());
+							}
+							configAsMap.put(configProp.getKey(), confBean);
+						}
+					}
+					GP2ConfigHelper.setConfig(camera, configAsMap.values().toArray(new CameraConfigEntryBean[configAsMap.size()]));
+				}
+
 				synchronized (this) {
 					CameraFileSystemEntryBean capturedFile = camera.capture();
 					if (capturedFile != null) {
@@ -188,6 +228,8 @@ public class GP2ApiServlet extends HttpServlet {
 						}
 					}
 				}
+			} else {
+				response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
 			}
 		} finally {
 			closeQuietly(camera);
