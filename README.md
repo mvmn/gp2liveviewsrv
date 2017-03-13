@@ -18,7 +18,9 @@ Stops currently active live-view
 
 Optional body with camera config settings to be set before making a shot:
 
-```{"/main/settings/capturetarget":"Memory card", "/main/capturesettings/shutterspeed":"1/1000"}``` 
+```
+{"/main/settings/capturetarget":"Memory card", "/main/capturesettings/shutterspeed":"1/1000"}
+``` 
 
 Trigger capture
 
