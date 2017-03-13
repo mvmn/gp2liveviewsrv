@@ -14,11 +14,27 @@ Starts live-view and serves MJPEG stream from chosen camera port (specified via 
 
 Stops currently active live-view
 
-* POST /capture
+* POST /capture?camera=usb:020,016\[&download=true]\[&downloadPreview=true]
+
+Optional body with camera config settings to be set before making a shot:
+
+```{"/main/settings/capturetarget":"Memory card", "/main/capturesettings/shutterspeed":"1/1000"}``` 
 
 Trigger capture
 
+* GET /images
+
+List files in images folder
+
+* GET /images/{filename}
+
+Get image from images folder
+
 ### Command-line parametes
+
+* Optional: ```-imagesFolder <path/to/folder>```
+
+Path to images folder, images from which can be downloaded via HTTP API, and to where captured images and previews will be saved. 
 
 * Optional: ```-port <number>```
 
