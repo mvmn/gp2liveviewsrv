@@ -22,7 +22,11 @@ Optional body with camera config settings to be set before making a shot:
 {"/main/settings/capturetarget":"Memory card", "/main/capturesettings/shutterspeed":"1/1000"}
 ``` 
 
-Trigger capture
+Trigger capture. If download and/or downloadPreview parameters were specified, JSON response with file names will be returned
+
+```
+{ "fileName": "IMG_8970.JPG", "previewFileName": "preview_IMG_8970.JPG" }
+```
 
 * GET /images
 
