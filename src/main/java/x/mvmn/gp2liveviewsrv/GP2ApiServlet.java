@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -177,6 +178,7 @@ public class GP2ApiServlet extends HttpServlet {
 					for (CameraConfigEntryBean cb : cfg) {
 						configAsMap.put(cb.getPath(), cb);
 					}
+					List<CameraConfigEntryBean> modifiedConfigs = new ArrayList<CameraConfigEntryBean>();
 					for (Map.Entry<String, String> configProp : config.entrySet()) {
 						CameraConfigEntryBean confBean = configAsMap.get(configProp.getKey());
 						if (confBean != null) {
@@ -189,10 +191,12 @@ public class GP2ApiServlet extends HttpServlet {
 								default:
 									confBean = confBean.cloneWithNewValue(configProp.getValue());
 							}
-							configAsMap.put(configProp.getKey(), confBean);
+							modifiedConfigs.add(confBean);
 						}
 					}
-					GP2ConfigHelper.setConfig(camera, configAsMap.values().toArray(new CameraConfigEntryBean[configAsMap.size()]));
+					if (modifiedConfigs.size() > 0) {
+						GP2ConfigHelper.setConfig(camera, modifiedConfigs.toArray(new CameraConfigEntryBean[modifiedConfigs.size()]));
+					}
 				}
 
 				synchronized (this) {
@@ -214,15 +218,13 @@ public class GP2ApiServlet extends HttpServlet {
 						}
 						if (downloadPreview) {
 							byte[] content = GP2CameraFilesHelper.getCameraFileContents(camera, capturedFile.getPath(), capturedFile.getName(), true);
-							downloadedFileName = "preview_" + capturedFile.getName();
-							File targetFile = new File(imagesDownloadFolder, downloadedFileName);
-							String targetFilePath = downloadedFileName;
+							File targetFile = new File(imagesDownloadFolder, "preview_" + capturedFile.getName());
+							String targetFilePath = "preview_" + capturedFile.getName();
 							try {
 								targetFilePath = targetFile.getCanonicalPath();
 								FileUtils.writeByteArrayToFile(targetFile, content, false);
 							} catch (IOException e) {
 								System.err.println("Error saving file " + targetFilePath);
-								downloadedFileName = null;
 								e.printStackTrace();
 							}
 						}
